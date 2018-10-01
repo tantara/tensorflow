@@ -151,6 +151,7 @@ enum class OperatorType : uint8 {
   kCTCBeamSearchDecoder,
   kUnpack,
   kZerosLike,
+  kAbs,
 };
 
 // Helper to deal with TensorFlow arrays using a different ordering of
@@ -1858,6 +1859,16 @@ struct UnpackOperator : Operator {
 // TensorFlow equivalent: tf.zeros_like
 struct TensorFlowZerosLikeOperator : Operator {
   TensorFlowZerosLikeOperator() : Operator(OperatorType::kZerosLike) {}
+};
+
+// Abs operator:
+//
+// Inputs:
+// inputs[0]: required: the input array
+//
+// TensorFlow equivalent: tf.abs
+struct AbsOperator : Operator {
+  AbsOperator() : Operator(OperatorType::kAbs) {}
 };
 
 // Alloc's are used for transient arrays only. An Alloc specifies which interval

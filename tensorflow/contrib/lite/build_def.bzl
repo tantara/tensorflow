@@ -295,6 +295,7 @@ def generated_test_models():
         "unpack",
         "where",
         "zeros_like",
+        "abs",
     ]
 
 def generated_test_conversion_modes():

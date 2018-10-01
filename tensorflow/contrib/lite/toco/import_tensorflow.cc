@@ -2083,6 +2083,7 @@ ConverterMapType GetTensorFlowNodeConverterMap() {
       {"Transpose", ConvertSimpleOperator<TransposeOperator, 2>},
       {"Unpack", ConvertUnpackOperator},
       {"ZerosLike", ConvertSimpleOperator<TensorFlowZerosLikeOperator, 1>},
+      {"Abs", ConvertSimpleOperator<AbsOperator, 1>},
   });
 }
 

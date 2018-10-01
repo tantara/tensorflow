@@ -877,6 +877,17 @@ Outputs {
 }
 ```
 
+**ABS**
+
+```
+Inputs {
+  0: a tensor
+}
+Outputs {
+  0: A tensor of elementwise add of the input tensor
+}
+```
+
 And these are TensorFlow Lite operations that are present but not ready for
 custom models yet:
 

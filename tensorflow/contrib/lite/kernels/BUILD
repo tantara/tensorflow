@@ -223,7 +223,8 @@ cc_library(
         "unidirectional_sequence_lstm.cc",
         "unidirectional_sequence_rnn.cc",
         "unpack.cc",
-        "zeros_like.cc",
+        "zeros_like.cc",    
+        "abs.cc",
     ],
     hdrs = [
     ],
@@ -1290,6 +1291,20 @@ tf_cc_test(
     name = "zeros_like_test",
     size = "small",
     srcs = ["zeros_like_test.cc"],
+    tags = ["tflite_not_portable_ios"],
+    deps = [
+        ":builtin_ops",
+        "//tensorflow/contrib/lite:builtin_op_data",
+        "//tensorflow/contrib/lite:framework",
+        "//tensorflow/contrib/lite/kernels:test_util",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+tf_cc_test(
+    name = "abs_test",
+    size = "small",
+    srcs = ["abs_test.cc"],
     tags = ["tflite_not_portable_ios"],
     deps = [
         ":builtin_ops",

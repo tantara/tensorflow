@@ -1662,6 +1662,7 @@ bool PropagateFixedSizes::Run(Model* model, std::size_t op_index) {
     case OperatorType::kLogicalNot:
     case OperatorType::kLogicalOr:
     case OperatorType::kZerosLike:
+    case OperatorType::kAbs:
       ProcessSimpleOperator(model, op, 0);
       break;
     case OperatorType::kGather:
