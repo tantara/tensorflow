@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/jit/deadness_analysis.h"
+#include "absl/algorithm/container.h"
 #include "absl/strings/str_join.h"
 #include "tensorflow/compiler/jit/deadness_analysis_internal.h"
 #include "tensorflow/core/graph/algorithm.h"
@@ -108,7 +109,7 @@ class Predicate {
 
   virtual string ToString() const = 0;
   int64 hash() const { return hash_; }
-  virtual gtl::ArraySlice<Predicate*> GetOperands() const = 0;
+  virtual absl::Span<Predicate* const> GetOperands() const = 0;
 
   virtual Kind kind() const = 0;
   virtual ~Predicate() {}
@@ -129,7 +130,7 @@ class Predicate {
 };
 
 int64 HashPredicateSequence(Predicate::Kind kind,
-                            gtl::ArraySlice<Predicate*> preds) {
+                            absl::Span<Predicate* const> preds) {
   int64 hash = ::tensorflow::hash<Predicate::Kind>()(kind);
   for (Predicate* pred : preds) {
     hash = Hash64Combine(hash, pred->hash());
@@ -154,13 +155,15 @@ class AndPredicate : public Predicate {
                    std::back_inserter(operands_str),
                    [](Predicate* pred) { return pred->ToString(); });
 
-    return strings::StrCat("(", absl::StrJoin(operands_str, " & "), ")");
+    return absl::StrCat("(", absl::StrJoin(operands_str, " & "), ")");
   }
 
   Kind kind() const override { return Kind::kAnd; }
 
-  gtl::ArraySlice<Predicate*> GetOperands() const override { return operands_; }
-  gtl::ArraySlice<Predicate*> operands() const { return operands_; }
+  absl::Span<Predicate* const> GetOperands() const override {
+    return operands_;
+  }
+  absl::Span<Predicate* const> operands() const { return operands_; }
 
  private:
   std::vector<Predicate*> operands_;
@@ -183,12 +186,14 @@ class OrPredicate : public Predicate {
                    std::back_inserter(operands_str),
                    [](Predicate* pred) { return pred->ToString(); });
 
-    return strings::StrCat("(", absl::StrJoin(operands_str, " | "), ")");
+    return absl::StrCat("(", absl::StrJoin(operands_str, " | "), ")");
   }
 
   Kind kind() const override { return Kind::kOr; }
-  gtl::ArraySlice<Predicate*> GetOperands() const override { return operands_; }
-  gtl::ArraySlice<Predicate*> operands() const { return operands_; }
+  absl::Span<Predicate* const> GetOperands() const override {
+    return operands_;
+  }
+  absl::Span<Predicate* const> operands() const { return operands_; }
 
  private:
   std::vector<Predicate*> operands_;
@@ -202,12 +207,14 @@ class NotPredicate : public Predicate {
         operands_({operand}) {}
 
   string ToString() const override {
-    return strings::StrCat("~", operand()->ToString());
+    return absl::StrCat("~", operand()->ToString());
   }
 
   Kind kind() const override { return Kind::kNot; }
   Predicate* operand() const { return operands_[0]; }
-  gtl::ArraySlice<Predicate*> GetOperands() const override { return operands_; }
+  absl::Span<Predicate* const> GetOperands() const override {
+    return operands_;
+  }
 
  private:
   std::array<Predicate*, 1> operands_;
@@ -234,13 +241,15 @@ class AndRecurrencePredicate : public Predicate {
   Predicate* step() const { return operands_[1]; }
 
   string ToString() const override {
-    return strings::StrCat("{", start()->ToString(), ",&,", step()->ToString(),
-                           "}");
+    return absl::StrCat("{", start()->ToString(), ",&,", step()->ToString(),
+                        "}");
   }
 
   Kind kind() const override { return Kind::kAndRecurrence; }
 
-  gtl::ArraySlice<Predicate*> GetOperands() const override { return operands_; }
+  absl::Span<Predicate* const> GetOperands() const override {
+    return operands_;
+  }
 
  private:
   std::array<Predicate*, 2> operands_;
@@ -259,12 +268,12 @@ class SymbolPredicate : public Predicate {
         must_be_true_(must_be_true) {}
 
   string ToString() const override {
-    return must_be_true() ? strings::StrCat("*", tensor_id_.ToString())
+    return must_be_true() ? absl::StrCat("*", tensor_id_.ToString())
                           : tensor_id_.ToString();
   }
 
   Kind kind() const override { return Kind::kSymbol; }
-  gtl::ArraySlice<Predicate*> GetOperands() const override { return {}; }
+  absl::Span<Predicate* const> GetOperands() const override { return {}; }
 
   // If `must_be_true()` is true this SymbolPredicate represents the proposition
   // "tensor_id() is live and evaluates to true".
@@ -313,11 +322,11 @@ template <typename FunctionTy>
 // them.
 class PredicateFactory {
  public:
-  Predicate* MakeAndPredicate(gtl::ArraySlice<Predicate*> operands) {
+  Predicate* MakeAndPredicate(absl::Span<Predicate* const> operands) {
     return MakeAndOrImpl(operands, /*is_and=*/true);
   }
 
-  Predicate* MakeOrPredicate(gtl::ArraySlice<Predicate*> operands) {
+  Predicate* MakeOrPredicate(absl::Span<Predicate* const> operands) {
     return MakeAndOrImpl(operands, /*is_and=*/false);
   }
 
@@ -374,7 +383,9 @@ class PredicateFactory {
         new PredicateT(std::forward<Args>(args)...));
   }
 
-  Predicate* MakeAndOrImpl(gtl::ArraySlice<Predicate*> operands, bool is_and);
+  Predicate* MakeAndOrImpl(absl::Span<Predicate* const> operands, bool is_and);
+  Predicate* MakeInternedAndOr(std::vector<Predicate*> simplified_ops,
+                               Predicate::Kind pred_kind);
 
   // Predicate instances are interned, meaning that there is only a single
   // instance of a Predicate object with a given content.  This makes checking
@@ -387,7 +398,7 @@ class PredicateFactory {
   // for the owning pointers to predicate instances.
 
   using SignatureForAndOr =
-      std::pair<Predicate::Kind, gtl::ArraySlice<Predicate*>>;
+      std::pair<Predicate::Kind, absl::Span<Predicate* const>>;
   using SignatureForNot = Predicate*;
   using SignatureForAndRec = std::pair<Predicate*, Predicate*>;
   using SignatureForSymbol = std::pair<SafeTensorId, bool>;
@@ -421,11 +432,40 @@ class PredicateFactory {
       interned_symbol_instances_;
 };
 
+Predicate* PredicateFactory::MakeInternedAndOr(
+    std::vector<Predicate*> simplified_ops, Predicate::Kind pred_kind) {
+  std::stable_sort(
+      simplified_ops.begin(), simplified_ops.end(),
+      [](Predicate* a, Predicate* b) { return a->hash() < b->hash(); });
+
+  auto it = interned_and_or_instances_.find({pred_kind, simplified_ops});
+  if (it != interned_and_or_instances_.end()) {
+    return it->second.get();
+  }
+
+  simplified_ops.shrink_to_fit();
+  // NB!  Because we'll use a non-owning reference to simplified_ops in the
+  // key for interned_and_or_instances_ we need to be careful to std::move()
+  // it all the way through.
+  absl::Span<Predicate* const> operands_slice = simplified_ops;
+  std::unique_ptr<Predicate> new_pred =
+      pred_kind == Predicate::Kind::kAnd
+          ? Make<AndPredicate>(std::move(simplified_ops))
+          : Make<OrPredicate>(std::move(simplified_ops));
+
+  Predicate* new_pred_ptr = new_pred.get();
+  interned_and_or_instances_.emplace(
+      SignatureForAndOr(pred_kind, operands_slice), std::move(new_pred));
+  return new_pred_ptr;
+}
+
 // Common code to create AndPredicate or OrPredicate instances.
-Predicate* PredicateFactory::MakeAndOrImpl(gtl::ArraySlice<Predicate*> operands,
-                                           bool is_and) {
+Predicate* PredicateFactory::MakeAndOrImpl(
+    absl::Span<Predicate* const> operands, bool is_and) {
   Predicate::Kind pred_kind =
       is_and ? Predicate::Kind::kAnd : Predicate::Kind::kOr;
+  Predicate::Kind other_pred_kind =
+      is_and ? Predicate::Kind::kOr : Predicate::Kind::kAnd;
   gtl::FlatSet<Predicate*> simplified_ops_set;
   std::vector<Predicate*> simplified_ops;
   for (Predicate* op : operands) {
@@ -464,30 +504,63 @@ Predicate* PredicateFactory::MakeAndOrImpl(gtl::ArraySlice<Predicate*> operands,
     }
   }
 
-  std::stable_sort(
-      simplified_ops.begin(), simplified_ops.end(),
-      [](Predicate* a, Predicate* b) { return a->hash() < b->hash(); });
+  // If all ops contain the same subop, then factor it out thanks to the
+  // distributive property. Such as:
+  // - (A & B) | (A & C) | (A & D) => A & (B | C | D)
+  // - (A | B) & (A | C) & (A | D) => A | (B & C & D)
+  //
+  // First find any predicates contained in all subops.
+  std::vector<Predicate*> common_inner_operands;
+  gtl::FlatSet<Predicate*> common_inner_operands_set;
+  for (Predicate* op : simplified_ops) {
+    if (op->kind() != other_pred_kind) {
+      common_inner_operands.clear();
+      break;
+    }
 
-  auto it = interned_and_or_instances_.find({pred_kind, simplified_ops});
-  if (it == interned_and_or_instances_.end()) {
-    simplified_ops.shrink_to_fit();
-    // NB!  Because we'll use a non-owning reference to simplified_ops in the
-    // key for interned_and_or_instances_ we need to be careful to std::move()
-    // it all the way through.
-    gtl::ArraySlice<Predicate*> operands_slice = simplified_ops;
-    std::unique_ptr<Predicate> new_pred =
-        is_and ? Make<AndPredicate>(std::move(simplified_ops))
-               : Make<OrPredicate>(std::move(simplified_ops));
-
-    Predicate* new_pred_ptr = new_pred.get();
-    CHECK(interned_and_or_instances_
-              .emplace(SignatureForAndOr(pred_kind, operands_slice),
-                       std::move(new_pred))
-              .second);
-    return new_pred_ptr;
-  } else {
-    return it->second.get();
+    if (common_inner_operands.empty()) {
+      common_inner_operands.insert(common_inner_operands.end(),
+                                   op->GetOperands().begin(),
+                                   op->GetOperands().end());
+    } else {
+      std::vector<Predicate*> sub_ops_intersection;
+      common_inner_operands.clear();
+      absl::c_copy_if(op->GetOperands(),
+                      std::back_inserter(common_inner_operands),
+                      [&](Predicate* sub_op) {
+                        return common_inner_operands_set.count(sub_op) == 1;
+                      });
+    }
+    if (common_inner_operands.empty()) break;
+    common_inner_operands_set.clear();
+    common_inner_operands_set.insert(common_inner_operands.begin(),
+                                     common_inner_operands.end());
   }
+
+  if (common_inner_operands.empty()) {
+    return MakeInternedAndOr(std::move(simplified_ops), pred_kind);
+  }
+
+  // For all predicates that can be factored out, remove them and recreate the
+  // subops.
+  std::vector<Predicate*> factored_ops;
+  for (Predicate* op : simplified_ops) {
+    std::vector<Predicate*> new_sub_op_ops;
+    absl::c_copy_if(op->GetOperands(), std::back_inserter(new_sub_op_ops),
+                    [&](Predicate* sub_op) {
+                      return std::find(common_inner_operands.begin(),
+                                       common_inner_operands.end(),
+                                       sub_op) == common_inner_operands.end();
+                    });
+    factored_ops.push_back(MakeAndOrImpl(new_sub_op_ops, !is_and));
+  }
+
+  Predicate* new_inner_op = MakeAndOrImpl(factored_ops, is_and);
+  std::vector<Predicate*> outer_ops;
+  outer_ops.push_back(new_inner_op);
+  outer_ops.insert(outer_ops.end(), common_inner_operands.begin(),
+                   common_inner_operands.end());
+  return MakeAndOrImpl(outer_ops, !is_and);
 }
 
 class DeadnessAnalysisImpl : public DeadnessAnalysis {
@@ -496,7 +569,7 @@ class DeadnessAnalysisImpl : public DeadnessAnalysis {
       : graph_(*graph), vlog_(VLOG_IS_ON(2)) {}
 
   Status Populate();
-  Status PopulateWithReversePostOrder(gtl::ArraySlice<Node*> rpo);
+  Status PopulateWithReversePostOrder(absl::Span<Node* const> rpo);
   bool HasInputsWithMismatchingDeadness(const Node& node) override;
   void Print() const override;
   gtl::FlatMap<TensorId, string, TensorId::Hasher> PredicateMapAsString() const;
@@ -527,7 +600,7 @@ class DeadnessAnalysisImpl : public DeadnessAnalysis {
     }
   }
 
-  void SetPredicate(Node* n, gtl::ArraySlice<int> output_idxs, Predicate* pred,
+  void SetPredicate(Node* n, absl::Span<const int> output_idxs, Predicate* pred,
                     std::vector<bool>* should_revisit) {
     for (int output_idx : output_idxs) {
       SetPredicate(n, output_idx, pred, should_revisit);
@@ -625,7 +698,7 @@ Predicate* DeduceStepPredicate(PredicateFactory* predicate_factory,
   }
 
   std::vector<Predicate*> and_ops;
-  gtl::ArraySlice<Predicate*> recurrent_pred_ops =
+  absl::Span<Predicate* const> recurrent_pred_ops =
       backedge_predicate->GetOperands();
 
   bool found_sym = false;
@@ -784,7 +857,7 @@ Status DeadnessAnalysisImpl::Populate() {
 }
 
 Status DeadnessAnalysisImpl::PopulateWithReversePostOrder(
-    gtl::ArraySlice<Node*> rpo) {
+    absl::Span<Node* const> rpo) {
   // This an abstract interpretation over the deadness propagation semantics of
   // the graph executor.
   //
@@ -924,7 +997,7 @@ Status ComputePredicates(const Graph& graph,
 }
 
 Status ComputePredicates(const Graph& graph,
-                         gtl::ArraySlice<Node*> reverse_post_order,
+                         absl::Span<Node* const> reverse_post_order,
                          PredicateMapTy* out_predicate_map) {
   DeadnessAnalysisImpl impl(&graph);
   TF_RETURN_IF_ERROR(impl.PopulateWithReversePostOrder(reverse_post_order));

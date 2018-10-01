@@ -693,9 +693,6 @@ def strided_slice(input_,
   parent_name = name
 
   if not (var is None and isinstance(op, ops.EagerTensor)):
-    # TODO(b/113297051): Assigning a function to an EagerTensor seems to leak
-    # memory. Slicing variables still leaks, although ".assign" is removed for
-    # EagerTensors which are not variable slices to mitigate the issue.
     def assign(val, name=None):
       """Closure that holds all the arguments to create an assignment."""
 
@@ -1278,7 +1275,7 @@ unique_with_counts.__doc__ = gen_array_ops.unique_with_counts.__doc__
 def split(value, num_or_size_splits, axis=0, num=None, name="split"):
   """Splits a tensor into sub tensors.
 
-  If `num_or_size_splits` is an integer type, `num_split`, then splits `value`
+  If `num_or_size_splits` is an integer type, then `value` is split
   along dimension `axis` into `num_split` smaller tensors.
   Requires that `num_split` evenly divides `value.shape[axis]`.
 
@@ -2788,6 +2785,67 @@ def quantize(input,  # pylint: disable=redefined-builtin
       mode=mode,
       round_mode=round_mode,
       name=name)
+
+
+@tf_export("searchsorted")
+def searchsorted(sorted_sequence,
+                 values,
+                 side="left",
+                 out_type=dtypes.int32,
+                 name=None):
+  """Searches input tensor for values on the innermost dimension.
+
+  A 2-D example:
+
+  ```
+    sorted_sequence = [[0, 3, 9, 9, 10],
+                       [1, 2, 3, 4, 5]]
+    values = [[2, 4, 9],
+              [0, 2, 6]]
+
+    result = searchsorted(sorted_sequence, values, side="left")
+
+    result == [[1, 2, 2],
+               [0, 1, 5]]
+
+    result = searchsorted(sorted_sequence, values, side="right")
+
+    result == [[1, 2, 4],
+               [0, 2, 5]]
+  ```
+
+  Args:
+    sorted_sequence: N-D `Tensor` containing a sorted sequence.
+    values: N-D `Tensor` containing the search values.
+    side: 'left' or 'right'; 'left' corresponds to lower_bound and 'right' to
+      upper_bound.
+    out_type: The output type (`int32` or `int64`).  Default is `tf.int32`.
+    name: Optional name for the operation.
+
+  Returns:
+    An N-D `Tensor` the size of values containing the result of applying either
+    lower_bound or upper_bound (depending on side) to each value.  The result
+    is not a global index to the entire `Tensor`, but the index in the last
+    dimension.
+
+  Raises:
+    ValueError: If the last dimension of `sorted_sequence >= 2^31-1` elements.
+                If the total size of values exceeds `2^31 - 1` elements.
+                If the first `N-1` dimensions of the two tensors don't match.
+  """
+  sequence_size = shape_internal(sorted_sequence)[-1]
+  values_size = shape_internal(values)[-1]
+  sorted_sequence_2d = reshape(sorted_sequence, [-1, sequence_size])
+  values_2d = reshape(values, [-1, values_size])
+  if side == "right":
+    output = gen_array_ops.upper_bound(sorted_sequence_2d, values_2d, out_type,
+                                       name)
+  elif side == "left":
+    output = gen_array_ops.lower_bound(sorted_sequence_2d, values_2d, out_type,
+                                       name)
+  else:
+    raise ValueError("side must be either 'right' or 'left'.  Saw: %s." % side)
+  return reshape(output, shape_internal(values))
 
 
 quantize.__doc__ = gen_array_ops.quantize_v2.__doc__

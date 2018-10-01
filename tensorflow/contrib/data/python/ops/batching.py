@@ -272,9 +272,9 @@ def _padded_batch_dense_window(dataset, padded_shape, padding_value=None):
       padding_value = 0
 
   def batch_init_fn(_):
-    return array_ops.fill(
-        array_ops.concat([np.array([0], dtype=np.int32), padded_shape], 0),
-        constant_op.constant(padding_value, dtype=dataset.output_types))
+    batch_shape = array_ops.concat(
+        [np.array([0], dtype=np.int32), padded_shape], 0)
+    return gen_array_ops.empty(batch_shape, dtype=dataset.output_types)
 
   def batch_reduce_fn(state, value):
     return array_ops.concat([state, [value]], 0)
@@ -345,12 +345,12 @@ def _padded_batch_sparse_window(dataset, padded_shape):
       dataset.apply(grouping.group_by_reducer(key_fn, reducer)))
 
 
-class _UnbatchDataset(dataset_ops.Dataset):
+class _UnbatchDataset(dataset_ops.UnaryDataset):
   """A dataset that splits the elements of its input into multiple elements."""
 
   def __init__(self, input_dataset):
     """See `unbatch()` for more details."""
-    super(_UnbatchDataset, self).__init__()
+    super(_UnbatchDataset, self).__init__(input_dataset)
     flat_shapes = nest.flatten(input_dataset.output_shapes)
     if any(s.ndims == 0 for s in flat_shapes):
       raise ValueError("Cannot unbatch an input with scalar components.")
@@ -514,12 +514,12 @@ def padded_batch_and_drop_remainder(batch_size,
   return _apply_fn
 
 
-class _DenseToSparseBatchDataset(dataset_ops.Dataset):
+class _DenseToSparseBatchDataset(dataset_ops.UnaryDataset):
   """A `Dataset` that batches ragged dense elements into `tf.SparseTensor`s."""
 
   def __init__(self, input_dataset, batch_size, row_shape):
     """See `Dataset.dense_to_sparse_batch()` for more details."""
-    super(_DenseToSparseBatchDataset, self).__init__()
+    super(_DenseToSparseBatchDataset, self).__init__(input_dataset)
     if not isinstance(input_dataset.output_types, dtypes.DType):
       raise TypeError("DenseToSparseDataset requires an input whose elements "
                       "have a single component, whereas the input has %r." %
@@ -548,7 +548,7 @@ class _DenseToSparseBatchDataset(dataset_ops.Dataset):
     return self._input_dataset.output_types
 
 
-class _RestructuredDataset(dataset_ops.Dataset):
+class _RestructuredDataset(dataset_ops.UnaryDataset):
   """An internal helper for changing the structure and shape of a dataset."""
 
   def __init__(self,
@@ -583,7 +583,7 @@ class _RestructuredDataset(dataset_ops.Dataset):
       ValueError: If either `output_types` or `output_shapes` is not compatible
         with the structure of `dataset`.
     """
-    super(_RestructuredDataset, self).__init__()
+    super(_RestructuredDataset, self).__init__(dataset)
     self._input_dataset = dataset
 
     if not allow_unsafe_cast:

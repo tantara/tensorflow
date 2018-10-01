@@ -272,18 +272,19 @@ Status HloComputation::RemoveInstruction(HloInstruction* instruction) {
       << "instruction " << instruction->name()
       << " has control successors and cannot be removed";
 
-  TF_RET_CHECK(instruction_iterators_.count(instruction) != 0);
-  auto inst_it = instruction_iterators_.at(instruction);
-  (*inst_it)->set_parent(nullptr);
-  instructions_.erase(inst_it);
+  auto inst_it = instruction_iterators_.find(instruction);
+  TF_RET_CHECK(inst_it != instruction_iterators_.end());
+  (*inst_it->second)->set_parent(nullptr);
+  instructions_.erase(inst_it->second);
+  instruction_iterators_.erase(inst_it);
   return Status::OK();
 }
 
-void HloComputation::set_root_instruction(
-    HloInstruction* new_root_instruction) {
+void HloComputation::set_root_instruction(HloInstruction* new_root_instruction,
+                                          bool accept_different_shape) {
   // The shape of the root (ignoring layout) is an invariant of the computation
   // for non-fusion cases.
-  if (!IsFusionComputation()) {
+  if (!IsFusionComputation() && !accept_different_shape) {
     CHECK(ShapeUtil::Compatible(new_root_instruction->shape(),
                                 root_instruction_->shape()))
         << new_root_instruction->shape() << " is incompatible with "
@@ -464,6 +465,14 @@ std::vector<HloComputation*> HloComputation::MakeEmbeddedComputationsList()
 }
 
 string HloComputation::ToString(const HloPrintOptions& options) const {
+  return ToString(options, MakeInstructionPostOrder());
+}
+
+string HloComputation::ToString(
+    const HloPrintOptions& options,
+    absl::Span<const HloInstruction* const> instruction_order) const {
+  CHECK_EQ(instruction_order.size(), instruction_count());
+
   std::ostringstream s;
   for (int i = 0; i < options.indent_amount(); i++) {
     s << "  ";
@@ -486,7 +495,9 @@ string HloComputation::ToString(const HloPrintOptions& options) const {
     new_options.set_indent_amount(options.indent_amount() + 1)
         .set_is_in_nested_computation(true);
     CanonicalNameMap name_map;
-    for (const HloInstruction* instruction : MakeInstructionPostOrder()) {
+    for (const HloInstruction* instruction : instruction_order) {
+      CHECK_EQ(this, instruction->parent());
+
       for (int i = 0; i < new_options.indent_amount(); i++) {
         s << "  ";
       }
@@ -552,13 +563,15 @@ HloComputation::CreateFromProto(
               return to_proto_id[a.get()] < to_proto_id[b.get()];
             });
 
-  return absl::WrapUnique(new HloComputation(proto.name(), parameter_count,
-                                             &instructions, root,
-                                             /*fusion_instruction=*/nullptr));
+  auto computation = absl::WrapUnique(
+      new HloComputation(proto.name(), parameter_count, &instructions, root,
+                         /*fusion_instruction=*/nullptr));
+  computation->unique_id_ = proto.id();
+  return std::move(computation);
 }
 
 void HloComputation::FuseInstructionsInto(
-    tensorflow::gtl::ArraySlice<HloInstruction*> instructions_to_fuse,
+    absl::Span<HloInstruction* const> instructions_to_fuse,
     HloInstruction* fusion_instruction) {
   CHECK_EQ(HloOpcode::kFusion, fusion_instruction->opcode());
   HloInstruction* root = instructions_to_fuse.front();
@@ -577,7 +590,7 @@ void HloComputation::FuseInstructionsInto(
 }
 
 HloInstruction* HloComputation::CreateFusionInstruction(
-    tensorflow::gtl::ArraySlice<HloInstruction*> instructions_to_fuse,
+    absl::Span<HloInstruction* const> instructions_to_fuse,
     HloInstruction::FusionKind fusion_kind) {
   HloInstruction* root = instructions_to_fuse.front();
   HloInstruction* fusion_instruction = AddInstruction(
@@ -904,13 +917,14 @@ std::unique_ptr<HloComputation> HloComputation::Clone(
   return CloneWithReplacements(
       /*replacements=*/std::unordered_map<const HloInstruction*,
                                           std::unique_ptr<HloInstruction>>(),
-      context, suffix);
+      /*extras=*/{}, context, suffix);
 }
 
 std::unique_ptr<HloComputation> HloComputation::CloneWithReplacements(
     std::unordered_map<const HloInstruction*, std::unique_ptr<HloInstruction>>
         replacements,
-    HloCloneContext* context, const string& suffix) {
+    absl::Span<HloInstruction*> extras, HloCloneContext* context,
+    const string& suffix) {
   std::unique_ptr<HloCloneContext> context_ptr;
   if (context == nullptr) {
     context_ptr = absl::make_unique<HloCloneContext>(parent(), suffix);
@@ -932,6 +946,9 @@ std::unique_ptr<HloComputation> HloComputation::CloneWithReplacements(
 
   VLOG(1) << "Cloning " << name() << " --> " << suffix << "\n";
   std::vector<HloInstruction*> postorder;
+  for (HloInstruction* instr : extras) {
+    postorder.push_back(instr);
+  }
   for (HloInstruction* instr : MakeInstructionPostOrder()) {
     if (HloInstruction* replacement = replace(instr)) {
       postorder.push_back(replacement);

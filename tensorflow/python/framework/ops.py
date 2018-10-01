@@ -55,8 +55,10 @@ from tensorflow.python.platform import app
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.util import compat
 from tensorflow.python.util import decorator_utils
+from tensorflow.python.util import deprecation
 from tensorflow.python.util import function_utils
 from tensorflow.python.util import lock_util
+from tensorflow.python.util import memory
 from tensorflow.python.util import tf_contextlib
 from tensorflow.python.util import tf_stack
 from tensorflow.python.util.deprecation import deprecated_args
@@ -799,6 +801,19 @@ class _EagerTensorBase(Tensor):
 
     Returns:
       Integer rank
+    """
+    raise NotImplementedError()
+
+  def _num_elements(self):
+    """Number of elements of this Tensor.
+
+    Unlike regular Tensors, the number of elements is always known for
+    EagerTensors.
+
+    This is more performant than tensor.shape.num_elements
+
+    Returns:
+      Long - num elements in the tensor
     """
     raise NotImplementedError()
 
@@ -2517,8 +2532,8 @@ def _set_shape_and_handle_data_for_outputs_c_api(op):
     output._shape_val = output._c_api_shape()
     # Set the resource handle data for compatibility with the Python shape
     # inference code.
-    serialized = c_api.GetResourceHandleShapeAndType(op._graph._c_graph,
-                                                     output._as_tf_output())
+    serialized = c_api.GetHandleShapeAndType(op._graph._c_graph,  # pylint: disable=protected-access
+                                             output._as_tf_output())
     if serialized:
       output._handle_data = (
           cpp_shape_inference_pb2.CppShapeInferenceResult.HandleData
@@ -5350,6 +5365,7 @@ def enable_eager_execution(config=None,
   computational graph).
 
   For example:
+
   ```python
   tf.enable_eager_execution()
 
@@ -5399,7 +5415,7 @@ def enable_eager_execution(config=None,
      TensorFlow graph, or if options provided conflict with a previous call
      to this function.
   """
-  if context._default_mode != context.EAGER_MODE:  # pylint: disable=protected-access
+  if context.default_execution_mode != context.EAGER_MODE:
     return enable_eager_execution_internal(
         config=config,
         device_policy=device_policy,
@@ -5442,15 +5458,15 @@ def enable_eager_execution_internal(config=None,
     raise ValueError(
         "execution_mode must be one of None, tf.contrib.eager.SYNC, "
         "tf.contrib.eager.ASYNC")
-  # pylint: disable=protected-access
-  if context._default_mode == context.GRAPH_MODE:
+  if context.default_execution_mode == context.GRAPH_MODE:
     graph_mode_has_been_used = (
         _default_session_stack.stack
         or len(get_default_graph().get_operations()) > 0)  # pylint: disable=g-explicit-length-test
     if graph_mode_has_been_used:
       raise ValueError(
           "tf.enable_eager_execution must be called at program startup.")
-  context._default_mode = context.EAGER_MODE
+  context.default_execution_mode = context.EAGER_MODE
+  # pylint: disable=protected-access
   if context._context is None:
     context._context = context.Context(
         config=config,
@@ -5794,11 +5810,8 @@ class GraphKeys(object):
   _STREAMING_MODEL_PORTS = "streaming_model_ports"
 
   @decorator_utils.classproperty
+  @deprecation.deprecated(None, "Use `tf.GraphKeys.GLOBAL_VARIABLES` instead.")
   def VARIABLES(cls):  # pylint: disable=no-self-argument
-    logging.log_first_n(logging.WARN,
-                        "VARIABLES collection name is deprecated, please use "
-                        "GLOBAL_VARIABLES instead; VARIABLES will be removed "
-                        "after 2017-03-02.", 1)
     return cls.GLOBAL_VARIABLES
 
 
@@ -5812,23 +5825,11 @@ def dismantle_graph(graph):
     graph: A `Graph` object to destroy. Neither it nor any of its ops are usable
       after this function runs.
   """
-  # pylint: disable=protected-access
-  # OrderedDict, constructed on Graph creation, makes a simple reference loop
-  # and hides it in an __attribute in some Python versions. We don't need to
-  # throw an error if we can't find it, but if we do find it we can break the
-  # loop to avoid creating work for the garbage collector.
-  graph_operations = graph.get_operations()
-  problematic_cycle = graph._functions.__dict__.get("_OrderedDict__root", None)
-  # pylint: enable=protected-access
-  if problematic_cycle:
-    try:
-      del problematic_cycle[0][:]
-    except TypeError:
-      # This is probably not one of the problematic Python versions. Continue
-      # with the rest of our cleanup.
-      pass
+  memory.dismantle_ordered_dict(graph._functions)  # pylint: disable=protected-access
+
   # Now clean up Operation<->Graph reference cycles by clearing all of the
   # attributes for the Graph and its ops.
+  graph_operations = graph.get_operations()
   for op in graph_operations:
     op.__dict__ = {}
   graph.__dict__ = {}
