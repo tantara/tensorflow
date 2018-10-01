@@ -38,19 +38,27 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
                                TfLiteIntArrayCopy(input->dims));
 }
 
+template <typename T>
+void Abs(const T* in_data, int num_elements, T* out_data) {
+  // TODO(alanchiao): add vectorized version.
+  for (int i = 0; i < num_elements; ++i) {
+    out_data[i] = in_data[i] > 0 ? in_data[i] : -in_data[i];
+  }
+}
+
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* input = GetInput(context, node, kInputTensor);
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
   const int num_elements = NumElements(input);
   switch (input->type) {
     case kTfLiteInt64:
-      memset(GetTensorData<int64_t>(output), 0, num_elements * sizeof(int64_t));
+      Abs(input->data.i64, num_elements, output->data.i64);
       break;
     case kTfLiteInt32:
-      memset(GetTensorData<int32_t>(output), 0, num_elements * sizeof(int32_t));
-      break;
+      Abs(input->data.i32, num_elements, output->data.i32);
+      break;s
     case kTfLiteFloat32:
-      memset(GetTensorData<float>(output), 0, num_elements * sizeof(float));
+      Abs(input->data.f, num_elements, output->data.f);
       break;
     default:
       context->ReportError(context,
