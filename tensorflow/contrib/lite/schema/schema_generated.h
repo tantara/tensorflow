@@ -235,6 +235,9 @@ struct ZerosLikeOptionsT;
 struct FillOptions;
 struct FillOptionsT;
 
+struct AbsOptions;
+struct AbsOptionsT;
+
 struct OperatorCode;
 struct OperatorCodeT;
 
@@ -395,11 +398,12 @@ enum BuiltinOperator {
   BuiltinOperator_SQUARE = 92,
   BuiltinOperator_ZEROS_LIKE = 93,
   BuiltinOperator_FILL = 94,
+  BuiltinOperator_ABS = 95,
   BuiltinOperator_MIN = BuiltinOperator_ADD,
   BuiltinOperator_MAX = BuiltinOperator_FILL
 };
 
-inline const BuiltinOperator (&EnumValuesBuiltinOperator())[94] {
+inline const BuiltinOperator (&EnumValuesBuiltinOperator())[96] {
   static const BuiltinOperator values[] = {
     BuiltinOperator_ADD,
     BuiltinOperator_AVERAGE_POOL_2D,
@@ -494,7 +498,8 @@ inline const BuiltinOperator (&EnumValuesBuiltinOperator())[94] {
     BuiltinOperator_REDUCE_ANY,
     BuiltinOperator_SQUARE,
     BuiltinOperator_ZEROS_LIKE,
-    BuiltinOperator_FILL
+    BuiltinOperator_FILL,
+    BuiltinOperator_ABS,
   };
   return values;
 }
@@ -596,6 +601,7 @@ inline const char * const *EnumNamesBuiltinOperator() {
     "SQUARE",
     "ZEROS_LIKE",
     "FILL",
+    "ABS",
     nullptr
   };
   return names;
@@ -676,11 +682,12 @@ enum BuiltinOptions {
   BuiltinOptions_SquareOptions = 66,
   BuiltinOptions_ZerosLikeOptions = 67,
   BuiltinOptions_FillOptions = 68,
+  BuiltinOptions_AbsOptions = 69,
   BuiltinOptions_MIN = BuiltinOptions_NONE,
   BuiltinOptions_MAX = BuiltinOptions_FillOptions
 };
 
-inline const BuiltinOptions (&EnumValuesBuiltinOptions())[69] {
+inline const BuiltinOptions (&EnumValuesBuiltinOptions())[70] {
   static const BuiltinOptions values[] = {
     BuiltinOptions_NONE,
     BuiltinOptions_Conv2DOptions,
@@ -750,7 +757,8 @@ inline const BuiltinOptions (&EnumValuesBuiltinOptions())[69] {
     BuiltinOptions_FloorDivOptions,
     BuiltinOptions_SquareOptions,
     BuiltinOptions_ZerosLikeOptions,
-    BuiltinOptions_FillOptions
+    BuiltinOptions_FillOptions,
+    BuiltinOptions_AbsOptions,
   };
   return values;
 }
@@ -826,6 +834,7 @@ inline const char * const *EnumNamesBuiltinOptions() {
     "SquareOptions",
     "ZerosLikeOptions",
     "FillOptions",
+    "AbsOptions",
     nullptr
   };
   return names;
@@ -1110,6 +1119,10 @@ template<> struct BuiltinOptionsTraits<ZerosLikeOptions> {
 
 template<> struct BuiltinOptionsTraits<FillOptions> {
   static const BuiltinOptions enum_value = BuiltinOptions_FillOptions;
+};
+
+template<> struct BuiltinOptionsTraits<AbsOptions> {
+  static const BuiltinOptions enum_value = BuiltinOptions_AbsOptions;
 };
 
 struct BuiltinOptionsUnion {
@@ -1686,6 +1699,14 @@ struct BuiltinOptionsUnion {
   const FillOptionsT *AsFillOptions() const {
     return type == BuiltinOptions_FillOptions ?
       reinterpret_cast<const FillOptionsT *>(value) : nullptr;
+  }
+  AbsOptionsT *AsFillOptions() {
+    return type == BuiltinOptions_AbsOptions ?
+      reinterpret_cast<AbsOptionsT *>(value) : nullptr;
+  }
+  const FillOptionsT *AsAbsOptions() const {
+    return type == BuiltinOptions_AbsOptions ?
+      reinterpret_cast<const AbsOptionsT *>(value) : nullptr;
   }
 };
 
@@ -6010,6 +6031,46 @@ inline flatbuffers::Offset<FillOptions> CreateFillOptions(
 
 flatbuffers::Offset<FillOptions> CreateFillOptions(flatbuffers::FlatBufferBuilder &_fbb, const FillOptionsT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct AbsOptionsT : public flatbuffers::NativeTable {
+  typedef AbsOptions TableType;
+  AbsOptionsT() {
+  }
+};
+
+struct AbsOptions FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef AbsOptionsT NativeTableType;
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           verifier.EndTable();
+  }
+  AbsOptionsT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(AbsOptionsT *_o, const flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static flatbuffers::Offset<AbsOptions> Pack(flatbuffers::FlatBufferBuilder &_fbb, const AbsOptionsT* _o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct AbsOptionsBuilder {
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  explicit AbsOptionsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  AbsOptionsBuilder &operator=(const AbsOptionsBuilder &);
+  flatbuffers::Offset<AbsOptions> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<AbsOptions>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<AbsOptions> CreateAbsOptions(
+    flatbuffers::FlatBufferBuilder &_fbb) {
+  AbsOptionsBuilder builder_(_fbb);
+  return builder_.Finish();
+}
+
+flatbuffers::Offset<AbsOptions> CreateAbsOptions(flatbuffers::FlatBufferBuilder &_fbb, const AbsOptionsT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct OperatorCodeT : public flatbuffers::NativeTable {
   typedef OperatorCode TableType;
   BuiltinOperator builtin_code;
@@ -6347,6 +6408,9 @@ struct Operator FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const FillOptions *builtin_options_as_FillOptions() const {
     return builtin_options_type() == BuiltinOptions_FillOptions ? static_cast<const FillOptions *>(builtin_options()) : nullptr;
   }
+  const AbsOptions *builtin_options_as_AbsOptions() const {
+    return builtin_options_type() == BuiltinOptions_AbsOptions ? static_cast<const AbsOptions *>(builtin_options()) : nullptr;
+  }
   const flatbuffers::Vector<uint8_t> *custom_options() const {
     return GetPointer<const flatbuffers::Vector<uint8_t> *>(VT_CUSTOM_OPTIONS);
   }
@@ -6648,6 +6712,9 @@ template<> inline const ZerosLikeOptions *Operator::builtin_options_as<ZerosLike
 
 template<> inline const FillOptions *Operator::builtin_options_as<FillOptions>() const {
   return builtin_options_as_FillOptions();
+}
+template<> inline const AbsOptions *Operator::builtin_options_as<AbsOptions>() const {
+  return builtin_options_as_AbsOptions();
 }
 
 struct OperatorBuilder {
@@ -8964,6 +9031,29 @@ inline flatbuffers::Offset<FillOptions> CreateFillOptions(flatbuffers::FlatBuffe
       _fbb);
 }
 
+inline NegOptionsT *AbsOptions::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = new AbsOptionsT();
+  UnPackTo(_o, _resolver);
+  return _o;
+}
+
+inline void AbsOptions::UnPackTo(NegOptionsT *_o, const flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+}
+
+inline flatbuffers::Offset<AbsOptions> AbsOptions::Pack(flatbuffers::FlatBufferBuilder &_fbb, const AbsOptionsT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateAbsOptions(_fbb, _o, _rehasher);
+}
+
+inline flatbuffers::Offset<AbsOptions> CreateAbsOptions(flatbuffers::FlatBufferBuilder &_fbb, const AbsOptionsT *_o, const flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { flatbuffers::FlatBufferBuilder *__fbb; const AbsOptionsT* __o; const flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  return tflite::CreateAbsOptions(
+      _fbb);
+}
+
 inline OperatorCodeT *OperatorCode::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
   auto _o = new OperatorCodeT();
   UnPackTo(_o, _resolver);
@@ -9425,6 +9515,10 @@ inline bool VerifyBuiltinOptions(flatbuffers::Verifier &verifier, const void *ob
       auto ptr = reinterpret_cast<const FillOptions *>(obj);
       return verifier.VerifyTable(ptr);
     }
+    case BuiltinOptions_AbsOptions: {
+      auto ptr = reinterpret_cast<const AbsOptions *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
     default: return false;
   }
 }
@@ -9715,6 +9809,10 @@ inline void *BuiltinOptionsUnion::UnPack(const void *obj, BuiltinOptions type, c
       auto ptr = reinterpret_cast<const FillOptions *>(obj);
       return ptr->UnPack(resolver);
     }
+    case BuiltinOptions_AbsOptions: {
+      auto ptr = reinterpret_cast<const AbsOptions *>(obj);
+      return ptr->UnPack(resolver);
+    }
     default: return nullptr;
   }
 }
@@ -9992,6 +10090,10 @@ inline flatbuffers::Offset<void> BuiltinOptionsUnion::Pack(flatbuffers::FlatBuff
     case BuiltinOptions_FillOptions: {
       auto ptr = reinterpret_cast<const FillOptionsT *>(value);
       return CreateFillOptions(_fbb, ptr, _rehasher).Union();
+    }
+    case BuiltinOptions_AbsOptions: {
+      auto ptr = reinterpret_cast<const AbsOptionsT *>(value);
+      return CreateAbsOptions(_fbb, ptr, _rehasher).Union();
     }
     default: return 0;
   }
@@ -10271,6 +10373,10 @@ inline BuiltinOptionsUnion::BuiltinOptionsUnion(const BuiltinOptionsUnion &u) FL
       value = new FillOptionsT(*reinterpret_cast<FillOptionsT *>(u.value));
       break;
     }
+        case BuiltinOptions_AbsOptions: {
+          value = new AbsOptionsT(*reinterpret_cast<AbsOptionsT *>(u.value));
+          break;
+        }
     default:
       break;
   }
@@ -10615,6 +10721,11 @@ inline void BuiltinOptionsUnion::Reset() {
     }
     case BuiltinOptions_FillOptions: {
       auto ptr = reinterpret_cast<FillOptionsT *>(value);
+      delete ptr;
+      break;
+    }
+    case BuiltinOptions_AbsOptions: {
+      auto ptr = reinterpret_cast<AbsOptionsT *>(value);
       delete ptr;
       break;
     }
