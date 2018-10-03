@@ -40,9 +40,9 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 
 template <typename T>
 void Abs(const T* in_data, int num_elements, T* out_data) {
-  // TODO(alanchiao): add vectorized version.
+  // TODO: add vectorized version.
   for (int i = 0; i < num_elements; ++i) {
-    out_data[i] = in_data[i] > 0 ? in_data[i] : -in_data[i];
+    out_data[i] = std::abs(in_data[i]);
   }
 }
 
@@ -70,7 +70,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   return kTfLiteOk;
 }
 
-}  // namespace abs
+}  // namespace abs 
 
 TfLiteRegistration* Register_ABS() {
   static TfLiteRegistration r = {/*init=*/nullptr, /*free=*/nullptr,

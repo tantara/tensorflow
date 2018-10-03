@@ -250,7 +250,7 @@ BuiltinOpResolver::BuiltinOpResolver() {
   AddBuiltin(BuiltinOperator_FLOOR_DIV, Register_FLOOR_DIV());
   AddBuiltin(BuiltinOperator_SQUARE, Register_SQUARE());
   AddBuiltin(BuiltinOperator_ZEROS_LIKE, Register_ZEROS_LIKE());
-  AddBuiltin(BuiltinOperator_ZEROS_LIKE, Register_ABS());
+  AddBuiltin(BuiltinOperator_ABS, Register_ABS());
 
   // TODO(andrewharp, ahentz): Move these somewhere more appropriate so that
   // custom ops aren't always included by default.
