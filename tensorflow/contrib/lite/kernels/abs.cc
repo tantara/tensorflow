@@ -56,7 +56,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       break;
     case kTfLiteInt32:
       Abs(input->data.i32, num_elements, output->data.i32);
-      break;s
+      break;
     case kTfLiteFloat32:
       Abs(input->data.f, num_elements, output->data.f);
       break;

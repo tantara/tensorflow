@@ -400,10 +400,10 @@ enum BuiltinOperator {
   BuiltinOperator_FILL = 94,
   BuiltinOperator_ABS = 95,
   BuiltinOperator_MIN = BuiltinOperator_ADD,
-  BuiltinOperator_MAX = BuiltinOperator_FILL
+  BuiltinOperator_MAX = BuiltinOperator_ABS
 };
 
-inline const BuiltinOperator (&EnumValuesBuiltinOperator())[96] {
+inline const BuiltinOperator (&EnumValuesBuiltinOperator())[95] {
   static const BuiltinOperator values[] = {
     BuiltinOperator_ADD,
     BuiltinOperator_AVERAGE_POOL_2D,
@@ -1700,11 +1700,11 @@ struct BuiltinOptionsUnion {
     return type == BuiltinOptions_FillOptions ?
       reinterpret_cast<const FillOptionsT *>(value) : nullptr;
   }
-  AbsOptionsT *AsFillOptions() {
+  AbsOptionsT *AsAbsOptions() {
     return type == BuiltinOptions_AbsOptions ?
       reinterpret_cast<AbsOptionsT *>(value) : nullptr;
   }
-  const FillOptionsT *AsAbsOptions() const {
+  const AbsOptionsT *AsAbsOptions() const {
     return type == BuiltinOptions_AbsOptions ?
       reinterpret_cast<const AbsOptionsT *>(value) : nullptr;
   }
@@ -9031,13 +9031,13 @@ inline flatbuffers::Offset<FillOptions> CreateFillOptions(flatbuffers::FlatBuffe
       _fbb);
 }
 
-inline NegOptionsT *AbsOptions::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
+inline AbsOptionsT *AbsOptions::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
   auto _o = new AbsOptionsT();
   UnPackTo(_o, _resolver);
   return _o;
 }
 
-inline void AbsOptions::UnPackTo(NegOptionsT *_o, const flatbuffers::resolver_function_t *_resolver) const {
+inline void AbsOptions::UnPackTo(AbsOptionsT *_o, const flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
 }
